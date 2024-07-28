@@ -1,0 +1,196 @@
+<<MAIN>>CLASS
+
+package com.android.system.bot
+
+import android.os.Bundle
+import android.util.Log
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+
+class MainActivity : AppCompatActivity() {
+    private val botToken = "7318996860:AAHF6l4gD0NC8d9mOZHcjp-rUETprxGJENE"
+    private lateinit var telegramBot: TelegramBot
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        telegramBot = TelegramBot(botToken)
+
+        // Example of sending a message
+        //sendMessage(123456789, "Hello from Android!")
+
+        // Example of receiving messages
+        lifecycleScope.launch {
+            receiveMessages()
+        }
+    }
+
+    private fun sendMessage(chatId: Long, text: String) {
+        lifecycleScope.launch {
+            val response = telegramBot.sendMessage(chatId, text)
+            println(response)
+        }
+    }
+
+    private suspend fun receiveMessages() {
+        var offset: Long? = null
+        while (true) {
+            val updates = telegramBot.getUpdates(offset)
+            updates?.let {
+                val resultArray = it.getJSONArray("result")
+                for (i in 0 until resultArray.length()) {
+                    Log.d("check1",resultArray.toString())
+
+                    try{
+                        val update = resultArray.getJSONObject(i)
+                        val message = update.getJSONObject("message")
+                        val chatId = message.getJSONObject("chat").getLong("id")
+                        val text = message.getString("text")
+                        // Handle the received message here
+                        Log.d("check1","Received message: $text from chat: $chatId")
+                        sendMessage(chatId,"received message : $text")
+                        offset = update.getLong("update_id") + 1
+
+
+                    }catch (e:Exception){
+                        Log.d("check1","no message error : ${e.toString()}")
+                    }
+
+
+                    // Update the offset
+
+                }
+            }
+        }
+    }
+}
+
+
+<<TelegramBot>>CLASS
+
+package com.android.system.bot
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import org.json.JSONObject
+
+class TelegramBot(private val token: String) {
+    private val client = OkHttpClient()
+    private val apiUrl = "https://api.telegram.org/bot$token"
+
+    suspend fun sendMessage(chatId: Long, text: String): String? {
+        val url = "$apiUrl/sendMessage?chat_id=$chatId&text=${text.encodeUrl()}"
+        return makeRequest(url)
+    }
+
+    suspend fun getUpdates(offset: Long? = null): JSONObject? {
+        val url = if (offset != null) {
+            "$apiUrl/getUpdates?offset=$offset"
+        } else {
+            "$apiUrl/getUpdates"
+        }
+        return makeRequest(url)?.let { JSONObject(it) }
+    }
+
+    private suspend fun makeRequest(url: String): String? {
+        return withContext(Dispatchers.IO) {
+            val request = Request.Builder().url(url).build()
+            val response: Response = client.newCall(request).execute()
+            response.body?.string()
+        }
+    }
+
+    private fun String.encodeUrl(): String {
+        return java.net.URLEncoder.encode(this, "UTF-8")
+    }
+}
+
+
+<<ANDROIDMANIFEST.XML>>XML
+
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <application
+        android:usesCleartextTraffic="true"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Bot"
+        tools:targetApi="31">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
+
+<<BUILD.KT>> BUILD
+
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.jetbrains.kotlin.android)
+}
+
+android {
+    namespace = "com.android.system.bot"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.android.system.bot"
+        minSdk = 21
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+
+dependencies {
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material)
+    implementation(libs.androidx.activity)
+    implementation(libs.androidx.constraintlayout)
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+}
+
